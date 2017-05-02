@@ -16,7 +16,7 @@ except ImportError:
 class MsBot(Flask):
     def __init__(self, import_name, *args, **kwargs):
         app_client_id = kwargs.pop('app_client_id', None)
-        reset_url = kwargs.pop('reset_url', None)
+        redis_uri = kwargs.pop('redis_uri', None)
         verify_jwt_signature = kwargs.pop('verify_jwt_signature', None)
 
         super(MsBot, self).__init__(import_name, *args, **kwargs)
@@ -26,7 +26,7 @@ class MsBot(Flask):
         self.processes = []
         config = Config()
         self.app_client_id = config.get_config(app_client_id, 'APP_CLIENT_ID')
-        self.redis_uri = config.get_config(reset_url, 'URI', root='redis')
+        self.redis_uri = config.get_config(redis_uri, 'URI', root='redis')
         self.redis = None
 
         try:
