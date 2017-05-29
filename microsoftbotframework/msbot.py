@@ -12,7 +12,7 @@ try:
 except ImportError:
     pass
 
-class MsBot:
+class MsBot(object):
     def __init__(self, host=None, port=None, debug=None, app_client_id=None, redis_uri=None, verify_jwt_signature=None):
         self.app = Flask(__name__)
 

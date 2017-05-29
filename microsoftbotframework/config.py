@@ -3,7 +3,7 @@ import yaml
 import logging
 
 
-class Config:
+class Config(object):
     def __init__(self):
         yaml_config = self.get_yaml_config()
         config = self.replace_missing_values_with_default(yaml_config)

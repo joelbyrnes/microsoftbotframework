@@ -6,7 +6,7 @@ import logging
 import json
 
 
-class Response:
+class Response(object):
     def __init__(self, message=None, auth=None, app_client_id=None, app_client_secret=None,
                  redis_uri=None, http_proxy=None, https_proxy=None):
         config = Config()
