@@ -5,6 +5,8 @@ import redis
 import logging
 import json
 
+logger = logging.getLogger(__name__)
+
 
 class Response(object):
     def __init__(self, message=None, auth=None, app_client_id=None, app_client_secret=None,
@@ -16,8 +18,17 @@ class Response(object):
         self.redis_uri = config.get_config(redis_uri, 'URI', root='redis')
         self.http_proxy = config.get_config(http_proxy, 'HTTP_PROXY')
         self.https_proxy = config.get_config(https_proxy, 'HTTPS_PROXY')
+        
+        # TODO include these in defaults? maybe create a section called bot?
+        params = {
+            "serviceUrl": config.get_config(None, 'service_url'),
+            # tenant identifies Suncorp not a specific channel
+            "channelData": {"tenant": {"id": config.get_config(None, 'tenant_id')}},
+            "bot": {"id": config.get_config(None, 'bot_id'), "name": config.get_config(None, 'bot_name')}
+        }
 
-        logger = logging.getLogger(__name__)
+        # use the config but allow message to override it
+        self.data = params.update(message or {})
 
         if self.app_client_id is None:
             logger.info('The \'APP_CLIENT_ID\' has not been set. Disabling authentication.')
@@ -32,9 +43,8 @@ class Response(object):
                 logger.info('The \'REDIS_URI_TOKEN_STORE\' has not been set. Disabling token caching.')
                 self.cache_token = False
 
-        self.data = {} if message is None else message
-        self.headers = None
-        self.token = None
+        self.session = requests.session()
+        self.session.headers = None
         self.redis = None
         self.redis_config = config.get_section_config('redis')
 
@@ -64,7 +74,7 @@ class Response(object):
                 "client_secret": self.app_client_secret,
                 "scope": "https://api.botframework.com/.default"
                 }
-        response = requests.post(response_auth_url, data)
+        response = self.session.post(response_auth_url, data)
         response_data = response.json()
 
         if self.cache_token:
@@ -122,17 +132,17 @@ class Response(object):
             else:
                 token = self._get_remote_auth_token()
 
-            self.headers = {"Authorization": "{} {}".format(token["token_type"], token["access_token"])}
+            self.session.headers = {"Authorization": "{} {}".format(token["token_type"], token["access_token"])}
 
     def _post_request(self, response_url, method, response_json=None):
         self._set_header()
 
         logger = logging.getLogger(__name__)
         logger.info('response_url: {}'.format(response_url))
-        logger.info('response_headers: {}'.format(json.dumps(self.headers)))
+        logger.info('response_headers: {}'.format(json.dumps(self.session.headers)))
         logger.info('response_json: {}'.format(json.dumps(response_json)))
 
-        post_response = method(response_url, json=response_json, headers=self.headers)
+        post_response = method(response_url, json=response_json, headers=self.session.headers)
 
         if post_response.status_code == 200 or post_response.status_code == 201:
             logger.info('Successfully posted to Microsoft Bot Connector. {}'.format(post_response.text))
@@ -160,11 +170,6 @@ class Response(object):
                 if field in self.data:
                     response_json[field] = self.data[field]
 
-        if override is not None:
-            for key, value in override.items():
-                if key in response_json:
-                    response_json[key] = value
-
         for field in additional_fields:
 
             if field in ['conversationId', 'activityId']:
@@ -176,6 +181,10 @@ class Response(object):
             else:
                 if field in self.data:
                     additional_params[field] = self.data[field]
+
+        if override:
+            response_json.update(override)
+            additional_params.update(override)
 
         return response_json, additional_params
 
@@ -194,7 +203,7 @@ class Response(object):
             additional_params['conversationId'] if conversation_id is None else conversation_id,
             additional_params['activityId'] if activity_id is None else activity_id))
 
-        return self._post_request(response_url, requests.post, response_json)
+        return self._post_request(response_url, self.session.post, response_json)
 
     def reply_to_activity(self, message, conversation_id=None,
                           activity_id=None, service_url=None, **override_response_json):
@@ -217,7 +226,7 @@ class Response(object):
             additional_params['conversationId'] if conversation_id is None else conversation_id,
             additional_params['activityId'] if activity_id is None else activity_id))
 
-        return self._post_request(response_url, requests.delete)
+        return self._post_request(response_url, self.session.delete)
 
     def create_conversation(self, message, topic_name=None, service_url=None, **override_response_json):
         response_json, additional_params = self._preload_message_data(
@@ -242,7 +251,7 @@ class Response(object):
 
         response_url = self.urljoin(additional_params['serviceUrl'] if service_url is None else service_url, "/v3/conversations")
 
-        return self._post_request(response_url, requests.post, response_json)
+        return self._post_request(response_url, self.session.post, response_json)
 
     @staticmethod
     def urljoin(url1, url2):
