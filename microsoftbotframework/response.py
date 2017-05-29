@@ -28,7 +28,8 @@ class Response(object):
         }
 
         # use the config but allow message to override it
-        self.data = params.update(message or {})
+        self.data = params
+        self.data.update(message or {})
 
         if self.app_client_id is None:
             logger.info('The \'APP_CLIENT_ID\' has not been set. Disabling authentication.')
@@ -164,11 +165,12 @@ class Response(object):
                     response_json['recipient'] = self.data['from']
                 elif field == 'replyToId' and 'id' in self.data:
                     response_json['replyToId'] = self.data['id']
-                elif field == 'timestamp':
-                    response_json["timestamp"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f%zZ")
             else:
                 if field in self.data:
                     response_json[field] = self.data[field]
+
+        if 'timestamp' in fields:   # why set this conditionally?
+            response_json["timestamp"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f%zZ")
 
         for field in additional_fields:
 
@@ -197,6 +199,9 @@ class Response(object):
             override=override_response_json,
         )
         response_json['text'] = message
+        # defaults
+        if not response_json.get('type'):
+            response_json['type'] = 'message'
 
         response_url = self.urljoin(additional_params['serviceUrl'] if service_url is None else service_url,
                                "/v3/conversations/{}/activities/{}".format(
